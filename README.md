@@ -167,6 +167,7 @@ magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
 
 | 文件 | 作用 |
 |---|---|
+| `package.json` | 插件元数据；`magpie.icon` 是官网 `console.systalyze.com/favicon.svg` 原图（161×161，暗色自适应），用在「发现」卡片和「已安装」行 |
 | `index.mjs` | 插件入口：`config` / `auth`(methods, loader, usage) / `provider.models` / `chat.headers`；辅助函数挂在 `_internal` 上（入口文件导出的每个函数都会被当插件调用） |
 | `models.mjs` | 10 个模型的预置能力与价格表 |
 | `console-usage.mjs` | 官方数据：归一化会话 cookie、读 `/me`、`/billing`、`/billing/grants`、`/inference-usage`，60 秒缓存 |

@@ -176,6 +176,7 @@ Budgets only affect the estimate path; on the official path the limit is the rea
 
 | File | What it does |
 |---|---|
+| `package.json` | Plugin metadata; `magpie.icon` is the site's own `console.systalyze.com/favicon.svg` (161×161, adapts to dark mode), used on the discovery card and the installed row |
 | `index.mjs` | The plugin: `config` / `auth`(methods, loader, usage) / `provider.models` / `chat.headers`; helpers hang off `_internal` (every function an entry file exports is called as a plugin) |
 | `models.mjs` | The preset capabilities and prices of the 10 models |
 | `console-usage.mjs` | Official numbers: normalises the session cookie, reads `/me`, `/billing`, `/billing/grants`, `/inference-usage`, cached for 60 seconds |

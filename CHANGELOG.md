@@ -1,5 +1,13 @@
 # 变更记录 / Changelog
 
+## 0.1.3
+
+插件图标换成官网的 / Use the official mark.
+
+- `magpie.icon` 从自绘的 SVG 换成 `console.systalyze.com/favicon.svg` 原图（161×161，内联
+  `prefers-color-scheme` 暗色自适应），现在「发现」卡片与「已安装」行显示的是官方图形。
+- 无代码改动。
+
 ## 0.1.2
 
 - 用量窗口不再带假的 `0%`：magpie 只在窗口有 `amount`/`limit` 时才画百分比，所以今日 / 近 7 天 / 近 30 天
