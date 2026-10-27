@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # the oldest supported (package.json engines) and the newest LTS
+        node: [20, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: the module loads
+        run: node -e "import('./index.mjs').then(m => { if (typeof m.SystalyzePlugin !== 'function') process.exit(1) })"
+      # every function an entry file exports is called as a plugin, so helpers
+      # must hang off _internal instead
+      - name: only plugin entry points are exported as functions
+        run: |
+          node -e "import('./index.mjs').then(m => {
+            const fns = Object.keys(m).filter(k => typeof m[k] === 'function')
+            const bad = fns.filter(k => !/(Plugin|Models)$/.test(k))
+            if (bad.length) { console.error('helpers exported as plugins:', bad); process.exit(1) }
+          })"
+      - name: smoke test (offline, no key)
+        run: npm test
+      - name: smoke test against the real endpoint
+        if: ${{ env.REAL_KEY != '' }}
+        env:
+          REAL_KEY: ${{ secrets.SYSTALYZE_KEY }}
+        run: npm test
