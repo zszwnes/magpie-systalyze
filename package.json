@@ -26,15 +26,15 @@
     "inference",
     "provider"
   ],
-  "author": "zwnes",
+  "author": "zszwnes",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zwnes/magpie-systalyze.git"
+    "url": "git+https://github.com/zszwnes/magpie-systalyze.git"
   },
-  "homepage": "https://github.com/zwnes/magpie-systalyze#readme",
+  "homepage": "https://github.com/zszwnes/magpie-systalyze#readme",
   "bugs": {
-    "url": "https://github.com/zwnes/magpie-systalyze/issues"
+    "url": "https://github.com/zszwnes/magpie-systalyze/issues"
   },
   "engines": {
     "node": ">=20"

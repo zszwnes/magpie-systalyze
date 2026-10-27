@@ -4,7 +4,7 @@
 
 # magpie-systalyze
 
-<a href="https://github.com/zwnes/magpie-systalyze"><img src="https://img.shields.io/badge/Star-on%20GitHub-f5c518?style=for-the-badge&logo=github" alt="Star on GitHub" height="48"></a>
+<a href="https://github.com/zszwnes/magpie-systalyze"><img src="https://img.shields.io/badge/Star-on%20GitHub-f5c518?style=for-the-badge&logo=github" alt="Star on GitHub" height="48"></a>
 
 把 [Systalyze](https://systalyze.com)（`https://inference.systalyze.com/v1`）接成 [magpie](https://github.com/yetone/magpie) 的 provider：
 它服务的 10 个模型全部预置好能力表和价格，登录一次就能在 magpie、Codex、OpenCode 里用；
@@ -40,7 +40,7 @@
 或者用命令行（本仓库打了 `magpie-plugin` topic）：
 
 ```sh
-magpie plugin add github:zwnes/magpie-systalyze
+magpie plugin add github:zszwnes/magpie-systalyze
 ```
 
 也可以在本仓库目录里：

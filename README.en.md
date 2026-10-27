@@ -4,7 +4,7 @@
 
 # magpie-systalyze
 
-<a href="https://github.com/zwnes/magpie-systalyze"><img src="https://img.shields.io/badge/Star-on%20GitHub-f5c518?style=for-the-badge&logo=github" alt="Star on GitHub" height="48"></a>
+<a href="https://github.com/zszwnes/magpie-systalyze"><img src="https://img.shields.io/badge/Star-on%20GitHub-f5c518?style=for-the-badge&logo=github" alt="Star on GitHub" height="48"></a>
 
 [Systalyze](https://systalyze.com) (`https://inference.systalyze.com/v1`) as a provider in [magpie](https://github.com/yetone/magpie):
 its 10 models ship with capabilities and prices, so one sign-in is enough to use them from magpie, Codex and OpenCode.
@@ -41,7 +41,7 @@ In the magpie app: **Plugins › Discover › Unofficial plugins · GitHub**, se
 Or from the command line (this repo carries the `magpie-plugin` topic):
 
 ```sh
-magpie plugin add github:zwnes/magpie-systalyze
+magpie plugin add github:zszwnes/magpie-systalyze
 ```
 
 Or from a checkout:

@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues live in GitHub Issues for zwnes/magpie-systalyze, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues for zszwnes/magpie-systalyze, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
