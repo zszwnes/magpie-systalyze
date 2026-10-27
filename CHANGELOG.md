@@ -1,5 +1,20 @@
 # 变更记录 / Changelog
 
+## 0.2.0
+
+卡片收窄成两行 / The card is down to two rows.
+
+- **用量卡片只有「余额」和「今日消耗」两行**，其余全部去掉：官方分支不再返回近 7 天 / 近 30 天窗口，
+  估算分支也一样；分模型明细两边都不再返回（`console-usage.mjs` 也不再请求
+  `inference-usage?groupBy=model`，少打一次接口）。7 天 / 30 天 / 分模型这些统计 magpie 自己会从账本算，
+  插件不重复报。
+- 账号行不再显示 plan（magpie 只要看到 `plan` 和 `user` 就在账号行后面渲染它）。
+- 两行都是 `aside`：余额仍带真实百分比（上限 = 授信总额），今日消耗只给 `display`。
+- 去掉选项 `perModel`、`moreWindows`、`budget`（月度预算不再生成任何窗口）；保留 `localUsage`、
+  `budgetDaily`、`consoleSession`。
+- `test/smoke.mjs` 改成断言「只有两行」：官方分支 `windows` 恰为 `余额,今日（官方）`，估算分支恰为
+  `今日（本地估算）`，并且没有任何窗口带 `model`。
+
 ## 0.1.3
 
 插件图标换成官网的 / Use the official mark.

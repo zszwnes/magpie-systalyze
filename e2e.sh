@@ -46,7 +46,7 @@ echo "== plugin add"; run plugin add "$here" </dev/null
 # installed it from npm or GitHub, the folder's when it was added by path.
 # PLUGIN_NAME overrides both.
 echo "== plugin options"
-run plugin options ${PLUGIN_NAME:-$(basename "$here")} '{"localUsage":true,"perModel":true}' </dev/null
+run plugin options ${PLUGIN_NAME:-$(basename "$here")} '{"localUsage":true,"budgetDaily":0}' </dev/null
 # the sign-in asks for the account's name, then for an optional console cookie,
 # then for the key
 echo "== plugin login systalyze"

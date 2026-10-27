@@ -13,8 +13,11 @@ session and you get the **official balance and real billing**; leave it out and 
 
 - **Models**: all 10 of `GET /v1/models` are preset in `models.mjs`, with context and output limits, vision, reasoning, the `low`/`medium`/`high` effort levels, and a reference price per million tokens. At runtime the real endpoint still wins: new models appear on their own, and when the endpoint is down the preset table comes back.
 - **API shape**: everything goes through `/v1/chat/completions` (`@ai-sdk/openai-compatible`). The vendor also serves `/v1/responses` and `/v1/messages`, but chat completions is the one shape that works for all 10 models, so there is no per-model API split.
-- **Usage (official)**: paste a `console.systalyze.com` session cookie when signing in (optional) and you get the official balance, the granted credit, and the console's own today / 7 days / 30 days spend in USD, plus a per-model breakdown.
-- **Usage (estimate)**: without a console session it falls back to magpie's `usage.jsonl`: tokens summed per day / 7 days / 30 days, priced with the table in `models.mjs`. Set a budget in the options and the estimate turns into real percentage windows, which magpie's router steers around.
+- **Usage (official)**: paste a `console.systalyze.com` session cookie when signing in (optional) and the card carries two rows — **Balance** (left / granted, with a real percentage) and **Today's spend** (USD, tokens, calls).
+- **Usage (estimate)**: without a console session it falls back to magpie's `usage.jsonl` and reports today's tokens and estimated cost only. Set a daily budget in the options and that window becomes a real percentage window, which magpie's router steers around.
+
+The card is deliberately just those two rows: 7 days / 30 days / per model are statistics magpie works out from its own
+ledger, so the plugin doesn't repeat them and doesn't fill the card up.
 
 ## Where usage comes from
 
@@ -43,12 +46,11 @@ The plugin reads:
 
 So there are two paths and the plugin picks one:
 
-1. **Session present → official numbers** (recommended). The balance window shows "how much is left / out of how
-   much", and three more windows carry the console's own today / 7 days / 30 days spend in USD, plus the top 6 models
-   by spend. Correct across clients and machines.
+1. **Session present → official numbers** (recommended). Two windows: the balance ("how much is left / out of how
+   much", with a real percentage) and today's spend (USD, tokens, calls). Correct across clients and machines.
 2. **No session → estimate from the local ledger.** It reads `~/.config/magpie/usage.jsonl`, keeps rows whose
-   `provider` is `systalyze` / `systalyze-plugin` or whose `host` is `inference.systalyze.com`, sums tokens per
-   window and prices them; `kind:"model_list"` probe rows are skipped. No extra permission, no network call — but
+   `provider` is `systalyze` / `systalyze-plugin` or whose `host` is `inference.systalyze.com`, sums today's
+   tokens and prices them; `kind:"model_list"` probe rows are skipped. No extra permission, no network call — but
    **other clients (curl, other tools) are not counted here**, and the prices are estimates.
 
 An expired session (401) never breaks the output: the plugin falls back to the estimate and puts the reason in
@@ -126,41 +128,35 @@ All 10 models of `GET /v1/models` are preset in `models.mjs`; the fields come fr
 
 ## Usage windows
 
-The two paths produce different windows.
+**Two rows, whichever path is taken.**
 
 **With a console session (official):**
 
 | Window | Contents | Shape |
 |---|---|---|
-| Balance | `$50.97 available · used $0.0294 / $51.0000` | percentage (`unit: usd`, `limit` = granted credit) |
-| Today (official) | `$0.0294 · 20K tokens · 273 calls` | `aside`, USD |
-| Last 7 days (official) | the same | `aside`, USD |
-| Last 30 days (official) | the same | `aside`, USD |
-
-With `perModel` on (the default), the top 6 models by spend are listed too.
+| Balance | `$50.9706 available · used $0.0294 / $51.0000` | percentage (`unit: usd`, `limit` = granted credit) |
+| Today (official) | `$0.0294 · 21K tokens · 282 calls` | `aside`, USD |
 
 **Without a session (local estimate):**
 
 | Window | Contents |
 |---|---|
 | Today (local estimate) | today's tokens, calls and estimated cost |
-| Last 7 days (local estimate) | the same, over 7 days |
-| Last 30 days (local estimate) | the same, over 30 days |
 
-Either way these are `aside` windows — **they show usage, they never stop you from using the key**. In the estimate
-path, giving a budget turns the matching windows into real percentage windows (`unit: usd`) and magpie's router
-starts steering around an account that is over it.
+Both are `aside` windows — **they show usage, they never stop you from using the key**. In the estimate path, giving
+a daily budget turns the today window into a real percentage window (`unit: usd`) and magpie's router starts
+steering around an account that is over it.
 
 ```sh
-magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
+magpie plugin options magpie-systalyze '{"budgetDaily":1}'
 ```
 
 Budgets only affect the estimate path; on the official path the limit is the real granted credit.
 
-> **Why most windows have no `N%`**: magpie only draws a percentage when a window carries `amount` or `limit`;
-> otherwise it prints `display` verbatim. The usage windows (today / 7 days / 30 days / per model) have no cap, so
-> the plugin leaves `amount` and `limit` out — adding them gets you a `0%` prefix that can never move. The balance
-> window does have a real cap (the granted credit), so it keeps `amount`/`limit`/`used`, and that percentage is real.
+> **Why today's spend has no `N%`**: magpie only draws a percentage when a window carries `amount` or `limit`;
+> otherwise it prints `display` verbatim. Today's spend has no cap, so the plugin leaves `amount` and `limit` out —
+> adding them gets you a `0%` prefix that can never move. The balance window does have a real cap (the granted
+> credit), so it keeps `amount`/`limit`/`used`, and that percentage is real.
 
 ## Options
 
@@ -168,8 +164,6 @@ Budgets only affect the estimate path; on the official path the limit is the rea
 |---|---|---|
 | `consoleSession` | `""` | Console session cookie. Given, the plugin reads the official balance and real billing; empty, it estimates from the local ledger. The one typed at sign-in is stored in the account's `metadata.console` and this option wins over it (handy for sharing one session across accounts, or topping it up without signing in again) |
 | `localUsage` | `true` | Off: show no estimate windows. It does **not** affect the official path |
-| `perModel` | `true` | Also list up to 6 models (both paths) |
-| `budget` | `0` | Monthly budget in USD, estimate path only. `>0` turns the 30 day window into a percentage one, and 7 days uses a quarter of it |
 | `budgetDaily` | `0` | Daily budget in USD, estimate path only. `>0` turns the today window into a percentage one |
 
 ## Layout
@@ -179,7 +173,7 @@ Budgets only affect the estimate path; on the official path the limit is the rea
 | `package.json` | Plugin metadata; `magpie.icon` is the site's own `console.systalyze.com/favicon.svg` (161×161, adapts to dark mode), used on the discovery card and the installed row |
 | `index.mjs` | The plugin: `config` / `auth`(methods, loader, usage) / `provider.models` / `chat.headers`; helpers hang off `_internal` (every function an entry file exports is called as a plugin) |
 | `models.mjs` | The preset capabilities and prices of the 10 models |
-| `console-usage.mjs` | Official numbers: normalises the session cookie, reads `/me`, `/billing`, `/billing/grants`, `/inference-usage`, cached for 60 seconds |
+| `console-usage.mjs` | Official numbers: normalises the session cookie, reads `/me`, `/billing`, `/billing/grants`, `/inference-usage?groupBy=day` (no per-model request), cached for 60 seconds |
 | `usage-store.mjs` | Reads `usage.jsonl`, sums per window, prices it (parsed rows cached by size+mtime) |
 | `test/smoke.mjs` | Offline smoke test; `REAL_KEY=stlzi_… node test/smoke.mjs` adds a check against the real endpoint |
 | `test/seed-usage.mjs` | Puts a few synthetic rows in a sandbox's `usage.jsonl`, so the windows have numbers |

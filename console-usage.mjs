@@ -109,7 +109,8 @@ export function ymd(ms) {
 /**
  * 取一次官方快照。返回：
  *   { email, tenantId, projectId, balance:{remaining, granted},
- *     windows:{today, "7d", "30d"}, models:[{id, calls, in, out, cacheRead, cost}] }
+ *     windows:{today, "7d", "30d"} }
+ * 只取按天的分桶，不请求分模型明细。
  * 会话无效时抛错（调用方负责回退到本地估算）。
  */
 export async function consoleSnapshot(session, now = Date.now()) {
@@ -125,11 +126,11 @@ export async function consoleSnapshot(session, now = Date.now()) {
     "/projects/" + projectId + "/inference-usage?groupBy=" + groupBy +
     "&from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to)
 
-  const [billing, grants, days, models] = await Promise.all([
+  // 只取按天的分桶：分模型明细不请求（卡片上不展示，少打一次接口）
+  const [billing, grants, days] = await Promise.all([
     getJSON("/tenants/" + tenantId + "/billing", session),
     getJSON("/tenants/" + tenantId + "/billing/grants", session).catch(() => []),
     getJSON(usagePath("day"), session),
-    getJSON(usagePath("model"), session).catch(() => ({ buckets: [] })),
   ])
 
   const remaining = micro(billing?.balance?.availableMicroUsd ?? billing?.free?.remainingMicroUsd)
@@ -142,14 +143,6 @@ export async function consoleSnapshot(session, now = Date.now()) {
   const start7 = ymd(now - 6 * DAY)
   const pick = (fn) => sumBuckets(buckets.filter((b) => fn(String(b?.group ?? ""))))
 
-  const modelBuckets = Array.isArray(models?.buckets) ? models.buckets : []
-  const perModel = modelBuckets
-    .map((b) => {
-      const s = sumBuckets([b])
-      return { id: String(b?.group ?? ""), ...s }
-    })
-    .filter((m) => m.id)
-
   return {
     email: me?.email || "",
     tenantId,
@@ -160,6 +153,5 @@ export async function consoleSnapshot(session, now = Date.now()) {
       "7d": pick((g) => g >= start7),
       "30d": sumBuckets(buckets),
     },
-    models: perModel,
   }
 }

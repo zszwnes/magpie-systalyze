@@ -12,8 +12,11 @@
 
 - **模型**：`GET /v1/models` 列出的 10 个模型全部预置（`models.mjs`），带上下文/输出上限、是否视觉、是否思考、思考档位 `low`/`medium`/`high` 和每百万 token 的参考价。运行时仍以真实接口为准：新上线的模型自动出现，接口挂了退回预置表。
 - **接口形状**：全部走 `/v1/chat/completions`（`@ai-sdk/openai-compatible`）。供应商另有两种形状 `/v1/responses`、`/v1/messages` 也可用，但 chat 对 10 个模型都稳，不需要按模型分 API。
-- **用量（官方）**：登录时把 `console.systalyze.com` 的会话 cookie 粘上（可选），就显示官方余额、授信额度和控制台自己算的今日 / 7 天 / 30 天美元花费与分模型明细，单位都是美元。
-- **用量（估算）**：没有控制台会话时退回本机 `usage.jsonl`：按今天 / 7 天 / 30 天汇总 token，乘 `models.mjs` 的价格估算花费；选项里设预算可把它变成真正的额度窗口，用超了路由会绕开。
+- **用量（官方）**：登录时把 `console.systalyze.com` 的会话 cookie 粘上（可选），卡片上就给出两行——**余额**（可用 / 授信，带真实百分比）和**今日消耗**（美元、token、次数），单位都是美元。
+- **用量（估算）**：没有控制台会话时退回本机 `usage.jsonl`，只报今天的 token 与估算花费；选项里设预算可把它变成真正的额度窗口，用超了路由会绕开。
+
+卡片刻意只有这两行：7 天 / 30 天 / 分模型这些统计 magpie 自己会从账本里算，插件不重复报，免得把卡片塞满。
+
 
 ## 用量从哪来
 
@@ -42,10 +45,10 @@
 
 于是有两条路，插件自动选：
 
-1. **有会话 → 官方数据**（推荐）。余额窗口给「还剩多少 / 授信多少」，另外三个窗口是控制台自己算的
-   今日 / 近 7 天 / 近 30 天美元花费，再按花费列前 6 个模型。跨客户端、跨机器都对。
+1. **有会话 → 官方数据**（推荐）。两个窗口：余额（还剩多少 / 授信多少，百分比是真的）和今日消耗
+   （当天美元花费、token、次数）。跨客户端、跨机器都对。
 2. **没有会话 → 本机账本估算**。读 `~/.config/magpie/usage.jsonl`，筛出 `provider` 为 `systalyze` /
-   `systalyze-plugin`、或 `host` 为 `inference.systalyze.com` 的行，按窗口汇总 token 并乘价目表；
+   `systalyze-plugin`、或 `host` 为 `inference.systalyze.com` 的行，汇总今天的 token 并乘价目表；
    探测产生的 `kind:"model_list"` 行会被排除。不需要额外权限、不联网，代价是别的客户端（curl、别的工具）
    的用量不在这里，价格是估算。
 
@@ -119,39 +122,33 @@ magpie models | grep systalyze  # 看模型
 
 ## 用量窗口
 
-两条路给出的窗口不同。
+**不管哪条路，卡片上只有两行。**
 
 **有控制台会话（官方）：**
 
 | 窗口 | 内容 | 形状 |
 |---|---|---|
-| 余额 | `$50.97 可用 · 已用 $0.0294 / $51.0000` | 百分比（`unit: usd`，`limit` = 授信总额） |
-| 今日（官方） | `$0.0294 · 20K tokens · 273 次` | `aside`，美元 |
-| 近 7 天（官方） | 同上 | `aside`，美元 |
-| 近 30 天（官方） | 同上 | `aside`，美元 |
-
-`perModel` 打开时（默认开），再按花费列前 6 个模型各一条。
+| 余额 | `$50.9706 可用 · 已用 $0.0294 / $51.0000` | 百分比（`unit: usd`，`limit` = 授信总额） |
+| 今日（官方） | `$0.0294 · 21K tokens · 282 次` | `aside`，美元 |
 
 **没有会话（本地估算）：**
 
 | 窗口 | 内容 |
 |---|---|
 | 今日（本地估算） | 今天的 token 数、调用次数、估算花费 |
-| 近 7 天（本地估算） | 同上，7 天 |
-| 近 30 天（本地估算） | 同上，30 天 |
 
-这两个分支都是 `aside`——**只展示用量，不限制你能不能用**。在估算分支里给了预算，对应窗口就变成
+两个窗口都是 `aside`——**只展示用量，不限制你能不能用**。在估算分支里给了每日预算，今日窗口就变成
 真正的百分比窗口（`unit: usd`），用超了 magpie 会绕开这个账号。
 
 ```sh
-magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
+magpie plugin options magpie-systalyze '{"budgetDaily":1}'
 ```
 
 预算只作用于估算分支；官方分支的上限就是真实授信额度。
 
-> **为什么大多数窗口没有 `N%`**：magpie 只在窗口带 `amount` 或 `limit` 时才画百分比，否则把 `display`
-> 原样输出。用量窗口（今日 / 7 天 / 30 天 / 分模型）没有上限，所以插件**不写** `amount`/`limit`——写了会得到
-> 一个恒为 `0%` 的前缀。余额窗口有真实上限（授信总额），才带 `amount`/`limit`/`used`，那个百分比是真的。
+> **为什么今日消耗没有 `N%`**：magpie 只在窗口带 `amount` 或 `limit` 时才画百分比，否则把 `display`
+> 原样输出。今日消耗没有上限，所以插件**不写** `amount`/`limit`——写了会得到一个恒为 `0%` 的前缀。
+> 余额窗口有真实上限（授信总额），才带 `amount`/`limit`/`used`，那个百分比是真的。
 
 ## 选项
 
@@ -159,8 +156,6 @@ magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
 |---|---|---|
 | `consoleSession` | `""` | 控制台会话 cookie。给了就读官方余额与真实计费；留空则用本机账本估算。登录时填的那一项存在账号的 `metadata.console`，这个选项优先级更高（适合多账号共用一个会话，或不想重登时临时补） |
 | `localUsage` | `true` | 关掉就不显示估算窗口。注意：官方分支不受它影响 |
-| `perModel` | `true` | 再按模型列最多 6 条（两个分支都生效） |
-| `budget` | `0` | 月度预算（美元），只作用于估算分支。`>0` 时 30 天窗口变成百分比窗口，7 天按预算的 1/4 |
 | `budgetDaily` | `0` | 每日预算（美元），只作用于估算分支。`>0` 时今日窗口变成百分比窗口 |
 
 ## 插件结构
@@ -170,7 +165,7 @@ magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
 | `package.json` | 插件元数据；`magpie.icon` 是官网 `console.systalyze.com/favicon.svg` 原图（161×161，暗色自适应），用在「发现」卡片和「已安装」行 |
 | `index.mjs` | 插件入口：`config` / `auth`(methods, loader, usage) / `provider.models` / `chat.headers`；辅助函数挂在 `_internal` 上（入口文件导出的每个函数都会被当插件调用） |
 | `models.mjs` | 10 个模型的预置能力与价格表 |
-| `console-usage.mjs` | 官方数据：归一化会话 cookie、读 `/me`、`/billing`、`/billing/grants`、`/inference-usage`，60 秒缓存 |
+| `console-usage.mjs` | 官方数据：归一化会话 cookie、读 `/me`、`/billing`、`/billing/grants`、`/inference-usage?groupBy=day`（不请求分模型），60 秒缓存 |
 | `usage-store.mjs` | 读 `usage.jsonl`、按窗口汇总、算钱（按 size+mtime 缓存解析结果） |
 | `test/smoke.mjs` | 离线冒烟；`REAL_KEY=stlzi_… node test/smoke.mjs` 追加真接口校验 |
 | `test/seed-usage.mjs` | 往沙箱的 `usage.jsonl` 塞几条合成用量，好让窗口有数字 |

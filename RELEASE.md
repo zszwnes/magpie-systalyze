@@ -14,19 +14,20 @@
    - `plugin add` reports `systalyze (Systalyze, 10 models)`;
    - `plugin login systalyze` asks for the account name, the console session (optional) and the key, then
      doesn't ask again;
-   - **estimate path** — `quota systalyze --json` shows the three windows (`今日（本地估算）` /
-     `近 7 天（本地估算）` / `近 30 天（本地估算）`), each with `unit: "tokens"` and an `aside` flag,
-     plus one window per model when `perModel` is on;
-   - **no stray `0%`** — the plain `quota systalyze` line must show those windows as bare text
+   - **estimate path** — `quota systalyze --json` shows exactly one window, `今日（本地估算）`, with
+     `unit: "tokens"` and an `aside` flag;
+   - **no stray `0%`** — the plain `quota systalyze` line must show the today window as bare text
      (`16K tokens · 1 次 · 约 $0.0060`), never prefixed with `0% (`; only the balance window and the
-     budget windows carry a percentage. In `--json` that means `amount`/`limit` are absent from
-     every usage window;
-   - **official path** — with a session the first window is the balance (`unit: "usd"`, `limit` = granted
-     credit, `used` = share spent), followed by `今日（官方）` / `近 7 天（官方）` / `近 30 天（官方）`
-     as `aside` USD windows printed as bare `$0.0294 · 21K tokens · 278 次` (again no `0%` prefix,
-     which is why those windows carry no `amount`), and the account row shows the console email;
-   - with `{"budget":10,"budgetDaily":1}` in the options the estimate windows switch to `unit: "usd"`,
-     `limit` 1 / 2.5 / 10 and `used` = the estimate over that limit; budgets don't touch the official path;
+     `budgetDaily` window carry a percentage. In `--json` that means `amount`/`limit` are absent from
+     the today window;
+   - **official path** — with a session `quota systalyze --json` shows exactly two windows: the balance
+     (`unit: "usd"`, `limit` = granted credit, `used` = share spent) and `今日（官方）`, an `aside` USD
+     window printed as bare `$0.0294 · 21K tokens · 282 次` (no `0%` prefix, which is why it carries no
+     `amount`); the account row shows the console email;
+   - **two rows only** — no `近 7 天` / `近 30 天` / per-model window on either path, no `plan` field
+     anywhere, and no `model` key in any window;
+   - with `{"budgetDaily":1}` in the options the estimate today window switches to `unit: "usd"`,
+     `limit` 1 and `used` = the estimate over that limit; it doesn't touch the official path;
    - a bogus session (`"consoleSession": "__Secure-better-auth.session_token=bogus"`) falls back to the
      estimate and `error` mentions 官方接口读不到;
    - `models` lists all 10 models under `systalyze/`, with context and output limits;

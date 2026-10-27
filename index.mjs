@@ -24,7 +24,7 @@ import {
   prettyName,
 } from "./models.mjs"
 import { consoleSnapshot, sessionOf } from "./console-usage.mjs"
-import { localUsage, shortModel } from "./usage-store.mjs"
+import { localUsage } from "./usage-store.mjs"
 
 const CHAT = NPM
 const DAY = 24 * 60 * 60 * 1000
@@ -148,12 +148,18 @@ function usageWindow(name, s, extra = {}) {
 
 const round4 = (v) => Math.round(v * 1e4) / 1e4
 
-/** 官方数据：余额窗口 + 三个真实计费窗口 + 分模型明细 */
-function officialUsage(snap, withModels) {
+/**
+ * 官方数据：卡片上只有两行 —— 余额 + 今日消耗，别的都不放。
+ * 两行都是 aside。
+ * 不返回 plan：magpie 只要看到 plan 和 user 就在账号行后面渲染它。
+ * 不写更多窗口：7 天 / 30 天 / 分模型都由 magpie 自己从账本里算，插件不用管。
+ */
+function officialUsage(snap) {
   const windows = []
   const granted = snap.balance.granted
   const remaining = snap.balance.remaining
   const spent = Math.max(0, granted - remaining)
+  // 余额是唯一带百分比的窗口：上限就是授信总额，那个百分比是真的
   if (granted > 0) {
     windows.push({
       name: "余额",
@@ -162,6 +168,7 @@ function officialUsage(snap, withModels) {
       amount: round4(remaining),
       limit: round4(granted),
       unit: "usd",
+      aside: true,
     })
   } else {
     windows.push({
@@ -172,71 +179,45 @@ function officialUsage(snap, withModels) {
     })
   }
 
-  const labels = { today: "今日（官方）", "7d": "近 7 天（官方）", "30d": "近 30 天（官方）" }
-  const spans = { today: 86400, "7d": 7 * 86400, "30d": 30 * 86400 }
-  for (const key of ["today", "7d", "30d"]) {
-    const s = snap.windows[key] ?? { calls: 0, in: 0, out: 0, cacheRead: 0, cost: 0 }
-    windows.push({
-      name: labels[key],
-      aside: true,
-      unit: "usd",
-      display: `${money(s.cost)} · ${compact(s.in + s.out)} tokens · ${s.calls} 次`,
-      span: spans[key],
-    })
-  }
+  const s = snap.windows.today ?? { calls: 0, in: 0, out: 0, cacheRead: 0, cost: 0 }
+  windows.push({
+    name: "今日（官方）",
+    aside: true,
+    unit: "usd",
+    display: `${money(s.cost)} · ${compact(s.in + s.out)} tokens · ${s.calls} 次`,
+    span: 86400,
+  })
 
-  const out = {
-    plan: "按 key 计费 · 余额与用量来自官方控制台",
-    windows,
-    user: snap.email || undefined,
-  }
-
-  if (withModels) {
-    const used = [...snap.models].sort((a, b) => b.cost - a.cost).slice(0, 6)
-    for (const m of used) {
-      out.windows.push({
-        name: shortModel(m.id),
-        aside: true,
-        unit: "usd",
-        display: `${money(m.cost)} · ${compact(m.in + m.out)} tokens · ${m.calls} 次`,
-        model: m.id,
-      })
-    }
-  }
-
-  if (!(snap.windows["30d"]?.calls > 0)) out.error = "官方账本里近 30 天还没有调用记录"
-  return out
+  return { windows, user: snap.email || undefined }
 }
 
 /**
- * auth.usage 的返回值。
+ * auth.usage 的返回值：卡片上只有「余额」和「今日消耗」两行，其余不返回。
  * 两条路：
  *   1. 给了控制台会话（登录时填 / 选项 consoleSession）→ 官方余额与官方计费，单位美元；
- *   2. 没给 → 按本机 usage.jsonl 估算，只报用量（aside，不影响可用性）。
- * 选项 budget（每月美元）/ budgetDaily（每日美元）只作用于估算那条路。
+ *   2. 没给 → 按本机 usage.jsonl 估算今天的用量（aside，不影响可用性）。
+ * 选项 budgetDaily（每日美元）只作用于估算那条路：给了就把今日那行变成真正的百分比窗口。
  */
 async function usage(directory, settings = {}, auth = null) {
-  const withModels = settings.perModel !== false
   const session = sessionOf(auth, settings)
 
   // 有控制台会话：走官方余额与官方计费
   if (session) {
     try {
-      return officialUsage(await consoleSnapshot(session), withModels)
+      return officialUsage(await consoleSnapshot(session))
     } catch (e) {
       const why = String(e?.message ?? e)
-      const fallback = await localEstimate(directory, settings, withModels, session)
+      const fallback = await localEstimate(directory, settings)
       fallback.error = `官方接口读不到（${why}），下面退回本地估算`
       return fallback
     }
   }
 
-  return localEstimate(directory, settings, withModels, session)
+  return localEstimate(directory, settings)
 }
 
-/** 本地账本估算（没有控制台会话时的默认路径） */
-async function localEstimate(directory, settings = {}, withModels = true, session = null) {
-  const budget = Number(settings.budget) > 0 ? Number(settings.budget) : 0
+/** 本地账本估算（没有控制台会话时的默认路径）：也只要「今日」一行 */
+async function localEstimate(directory, settings = {}) {
   const budgetDaily = Number(settings.budgetDaily) > 0 ? Number(settings.budgetDaily) : 0
   let data
   try {
@@ -259,32 +240,13 @@ async function localEstimate(directory, settings = {}, withModels = true, sessio
     }
   }
   windows.push(budgeted("今日（本地估算）", data.today, budgetDaily, { resetSecs: 86400, span: 86400 }))
-  windows.push(budgeted("近 7 天（本地估算）", data["7d"], budget > 0 ? budget / 4 : 0, { span: 7 * 86400 }))
-  windows.push(budgeted("近 30 天（本地估算）", data["30d"], budget, { span: 30 * 86400 }))
 
-  const out = {
-    plan: budget > 0 ? "按 key 计费 · 预算为自设，用量为本地估算" : "按 key 计费 · 用量为本地估算",
-    windows,
-  }
+  // 不返回 plan：magpie 只要看到 plan 和 user 就在账号行后面渲染它
+  const out = { windows }
 
-  // 分模型明细：只列出用过的，按 token 排序
-  if (withModels) {
-    const used = [...data["30d"].models.values()].sort((a, b) => b.in + b.out - (a.in + a.out)).slice(0, 6)
-    for (const m of used) {
-      out.windows.push({
-        name: shortModel(m.id),
-        aside: true,
-        display: `${compact(m.in + m.out)} tokens · ${m.calls} 次 · 约 ${money(m.cost)}`,
-        unit: "tokens",
-        model: m.id,
-      })
-    }
-  }
-
+  // 有 error 时 magpie 会把整个窗口区换成一行报错，所以只在一条记录都没有时提示
   if (!data.all.calls) {
     out.error = "还没有本供应商的请求记录：先用任意一个模型跑一次，用量就会出现在这里"
-  } else if (data["30d"].errors > 0) {
-    out.error = `近 30 天有 ${data["30d"].errors} 次请求失败（见 magpie 日志）`
   }
   return out
 }
@@ -292,7 +254,7 @@ async function localEstimate(directory, settings = {}, withModels = true, sessio
 // ---- 插件 --------------------------------------------------------------------
 
 export async function SystalyzePlugin({ client, directory } = {}, options = {}) {
-  const settings = { localUsage: true, perModel: true, budget: 0, budgetDaily: 0, consoleSession: "", ...options }
+  const settings = { localUsage: true, budgetDaily: 0, consoleSession: "", ...options }
   const base = BASE_URL
   const id = PROVIDER
 
