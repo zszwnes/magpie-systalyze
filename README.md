@@ -121,20 +121,24 @@ magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
 | `models.mjs` | 10 个模型的预置能力与价格表 |
 | `usage-store.mjs` | 读 `usage.jsonl`、按窗口汇总、算钱（按 size+mtime 缓存解析结果） |
 | `test/smoke.mjs` | 离线冒烟；`REAL_KEY=stlzi_… node test/smoke.mjs` 追加真接口校验 |
+| `test/seed-usage.mjs` | 往沙箱的 `usage.jsonl` 塞几条合成用量，好让窗口有数字 |
 | `e2e.sh` | 手动验证：在沙箱里跑真实 magpie |
 
 ## 开发与测试
 
 ```sh
 npm test                          # 离线冒烟，不需要网络和 key
-REAL_KEY=stlzi_… npm test         # 追加真接口校验
+REAL_KEY=stlzi_… npm test         # 追加真接口校验（10 个模型）
 ```
 
 用真实 magpie 手动验证（沙箱在 `.e2e/`，不碰你自己的 magpie 配置）：
 
 ```sh
-SYSTALYZE_KEY=stlzi_… ./e2e.sh
+SYSTALYZE_KEY=stlzi_… ./e2e.sh          # 装插件、登录、看模型、跑一次真实请求
+SEED=1 SYSTALYZE_KEY=stlzi_… ./e2e.sh   # 另往沙箱账本里塞几条合成用量，看窗口动起来
 ```
+
+沙箱里的账本是空的，所以不塞 `SEED=1` 时三个窗口都是 `0 tokens · 0 次`。
 
 发版流程见 [RELEASE.md](./RELEASE.md)。
 

@@ -19,17 +19,35 @@ here=$(cd "$(dirname "$0")" && pwd)
 sb=$here/.e2e/$(printf %s "$SYSTALYZE_KEY" | (md5sum 2>/dev/null || shasum) | cut -c1-8)
 rm -rf "$sb" && mkdir -p "$sb"
 m=${MAGPIE:-$(command -v magpie || echo "/d/工具/magpie-windows-amd64.exe")}
-# USERPROFILE/APPDATA are what the Windows build treats as HOME
+# USERPROFILE/APPDATA are what the Windows build treats as HOME.
+# The sandbox starts with no Bun, and magpie would download one: reuse the one
+# this machine already has, or set MAGPIE_BUN to a bun of your own.
+real_home=${HOME-}
+if [ -z "${MAGPIE_BUN-}" ]; then
+  for b in "$real_home/.cache/magpie/bun"/*/magpie-bun.exe "$real_home"/.bun/bin/bun "$(command -v bun 2>/dev/null)"; do
+    [ -x "$b" ] && { MAGPIE_BUN=$b; break; }
+  done
+fi
+# unquoted on purpose: it is empty when there is no Bun to point at
+bunenv=""
+[ -n "${MAGPIE_BUN-}" ] && bunenv="MAGPIE_BUN=$MAGPIE_BUN"
 run() { env -i PATH="$PATH" HOME="$sb" USERPROFILE="$sb" APPDATA="$sb/.config" \
-  XDG_CONFIG_HOME="$sb/.config" XDG_CACHE_HOME="$sb/.cache" MAGPIE_PLUGIN_MARKET=off "$m" "$@"; }
+  XDG_CONFIG_HOME="$sb/.config" XDG_CACHE_HOME="$sb/.cache" MAGPIE_PLUGIN_MARKET=off \
+  $bunenv "$m" "$@"; }
 
 echo "== $("$m" --version 2>/dev/null || echo magpie: "$m")"
 echo "== plugin add"; run plugin add "$here" </dev/null
+# options are addressed by the plugin's name: the package's name when magpie
+# installed it from npm or GitHub, the folder's when it was added by path.
+# PLUGIN_NAME overrides both.
 echo "== plugin options"
-run plugin options magpie-systalyze '{"localUsage":true,"perModel":true}' </dev/null
+run plugin options ${PLUGIN_NAME:-$(basename "$here")} '{"localUsage":true,"perModel":true}' </dev/null
 # the sign-in asks for the account's name, then for the key
 echo "== plugin login systalyze"
 printf '%s\n%s\n' "$name" "$SYSTALYZE_KEY" | run plugin login systalyze
+# magpie's ledger is the only usage source this plugin has, so a fresh sandbox
+# starts at zero: SEED=1 puts a few synthetic rows in it to see the windows move
+[ -n "${SEED-}" ] && node "$here/test/seed-usage.mjs" "$sb"
 echo "== quota systalyze --json"; run quota systalyze --json </dev/null
 echo "== plugin list"; run plugin list </dev/null
 echo "== models"; run models </dev/null | grep -i systalyze || true

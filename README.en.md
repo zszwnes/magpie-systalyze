@@ -125,20 +125,24 @@ magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
 | `models.mjs` | The preset capabilities and prices of the 10 models |
 | `usage-store.mjs` | Reads `usage.jsonl`, sums per window, prices it (parsed rows cached by size+mtime) |
 | `test/smoke.mjs` | Offline smoke test; `REAL_KEY=stlzi_… node test/smoke.mjs` adds a check against the real endpoint |
+| `test/seed-usage.mjs` | Puts a few synthetic rows in a sandbox's `usage.jsonl`, so the windows have numbers |
 | `e2e.sh` | Manual check: this checkout in a real magpie, in a sandbox |
 
 ## Development
 
 ```sh
 npm test                          # offline smoke test, no network, no key
-REAL_KEY=stlzi_… npm test         # adds a check against the real endpoint
+REAL_KEY=stlzi_… npm test         # adds a check against the real endpoint (10 models)
 ```
 
 Manual check with a real magpie (sandbox in `.e2e/`, your own config untouched):
 
 ```sh
-SYSTALYZE_KEY=stlzi_… ./e2e.sh
+SYSTALYZE_KEY=stlzi_… ./e2e.sh          # add the plugin, sign in, list models, one real request
+SEED=1 SYSTALYZE_KEY=stlzi_… ./e2e.sh   # also puts a few synthetic rows in the sandbox ledger
 ```
+
+A sandbox ledger starts empty, so without `SEED=1` all three windows read `0 tokens · 0 calls`.
 
 Release steps: [RELEASE.md](./RELEASE.md).
 

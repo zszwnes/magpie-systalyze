@@ -14,7 +14,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node test/smoke.mjs"
+    "test": "node test/smoke.mjs",
+    "check": "node --check index.mjs && node --check models.mjs && node --check usage-store.mjs && node test/smoke.mjs"
   },
   "keywords": [
     "magpie",

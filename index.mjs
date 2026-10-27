@@ -18,7 +18,6 @@ import {
   capabilityTable,
   genericModel,
   presetOf,
-  presetModels,
   prettyName,
 } from "./models.mjs"
 import { localUsage, shortModel } from "./usage-store.mjs"
@@ -106,6 +105,13 @@ function configModel(id) {
     ...(p.reasoning ? { variants: variants(EFFORTS) } : {}),
     provider: { npm: CHAT, api: BASE_URL },
   }
+}
+
+/** 预置表的运行时形状（没有 key 或接口挂了时用，和真接口那条路同构） */
+function presetRuntimeModels(providerID, base) {
+  const out = {}
+  for (const mid of Object.keys(PRESET_MODELS)) out[mid] = runtimeModel(mid, providerID, base)
+  return out
 }
 
 /** config 钩子的整张模型表 */
@@ -269,7 +275,8 @@ export async function SystalyzePlugin({ client, directory } = {}, options = {}) 
       id,
       // 每个账号一次：以真接口的 id 列表为准，套用预置能力表
       async models(provider, { auth } = {}) {
-        if (auth?.type !== "api" || !auth.key) return provider?.models ?? presetModels()
+        // 没登录（或账号不是 api 类型）：直接给预置表，形状必须和真接口那条路一样
+        if (auth?.type !== "api" || !auth.key) return presetRuntimeModels(id, base)
         try {
           const ids = await fetchModelIds(base, auth.key)
           const out = {}
@@ -278,7 +285,7 @@ export async function SystalyzePlugin({ client, directory } = {}, options = {}) 
         } catch (e) {
           if (e?.signIn) throw e
           // 拿不到列表就退回预置表，标记 fallback 让 magpie 不缓存太久
-          const list = provider?.models && Object.keys(provider.models).length ? provider.models : presetModels()
+          const list = presetRuntimeModels(id, base)
           try {
             list[Symbol.for("magpie.fellBack")] = true
           } catch {}
@@ -313,6 +320,7 @@ export const _internal = {
   VERSION,
   capabilityTable,
   configModels,
+  presetRuntimeModels,
   fetchModelIds,
   genericModel,
   prettyName,

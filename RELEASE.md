@@ -5,13 +5,16 @@
 1. `npm test` must pass locally (CI runs the same, on Node 20 and 24).
 2. **手动跑一遍真实 magpie / Run `./e2e.sh` against a real magpie and a real key** before tagging:
    ```sh
-   SYSTALYZE_KEY=stlzi_... ./e2e.sh
+   SEED=1 SYSTALYZE_KEY=stlzi_... ./e2e.sh
    ```
+   (`SEED=1` fills the sandbox ledger with a few synthetic rows, so the usage windows have numbers to show.)
    Check that:
    - `plugin add` reports `systalyze (Systalyze, 10 models)`;
    - `plugin login systalyze` accepts the key without asking again afterwards;
    - `quota systalyze --json` shows the three windows (`今日` / `近 7 天` / `近 30 天`), each with
      `unit: "tokens"` and an `aside` flag, plus one window per model when `perModel` is on;
+   - with `{"budget":10,"budgetDaily":1}` in the options the three windows switch to `unit: "usd"`,
+     `limit` 1 / 2.5 / 10 and `used` = the estimate over that limit;
    - `models` lists all 10 models under `systalyze/`, with context and output limits;
    - `provider test systalyze` gets an answer (a real chat request).
 3. Bump `version` in `package.json` and commit.
