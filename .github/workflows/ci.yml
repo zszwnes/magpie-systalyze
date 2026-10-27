@@ -19,6 +19,9 @@ jobs:
       matrix:
         # the oldest supported (package.json engines) and the newest LTS
         node: [20, 24]
+    env:
+      # an empty secret makes the real-endpoint step skip: forks have no key
+      REAL_KEY: ${{ secrets.SYSTALYZE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,7 +41,5 @@ jobs:
       - name: smoke test (offline, no key)
         run: npm test
       - name: smoke test against the real endpoint
-        if: ${{ env.REAL_KEY != '' }}
-        env:
-          REAL_KEY: ${{ secrets.SYSTALYZE_KEY }}
+        if: env.REAL_KEY != ''
         run: npm test
