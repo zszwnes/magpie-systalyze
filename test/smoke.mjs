@@ -58,6 +58,10 @@ const u = await hooks.auth.usage(async () => ({ type: "api", key: "stlzi_test" }
 ok(Array.isArray(u.windows) && u.windows.length >= 3, "usage 返回 3 个基础窗口")
 ok(u.windows.every((w) => typeof w.name === "string" && typeof w.display === "string"), "窗口带 name/display")
 ok(u.windows.every((w) => w.aside === true), "窗口是 aside（不限制使用）")
+ok(
+  u.windows.every((w) => w.amount === undefined && w.limit === undefined),
+  "没有上限的窗口不带 amount/limit（否则 magpie 会给每行补一个 0%）",
+)
 
 console.log("usage-store.mjs")
 const now = Date.parse("2026-10-27T09:00:00+08:00")
@@ -100,10 +104,16 @@ ok(off.windows[0].name === "余额" && off.windows[0].limit === 50, "余额窗�
 ok(Math.round(off.windows[0].used * 100) / 100 === 2, "余额窗口按已用/授信算百分比")
 ok(off.windows[0].unit === "usd" && off.windows[0].display.includes("$49.0000"), "余额显示可用金额")
 ok(off.windows.slice(1, 4).every((w) => w.aside === true && w.unit === "usd"), "三个官方窗口是 aside 美元窗口")
+ok(
+  off.windows.slice(1).every((w) => w.amount === undefined && w.limit === undefined),
+  "官方用量窗口只报用量：不带 amount/limit，quota 里才不会被写成 0%",
+)
 ok(off.windows[1].display.includes("$0.5000"), "官方窗口显示当天花费")
 ok(off.windows.at(-1).model === ids[0], "官方分模型窗口带 model id")
 ok(_internal.officialUsage({ ...snap, windows: { today: snap.windows.today, "7d": snap.windows["7d"], "30d": { calls: 0, in: 0, out: 0, cacheRead: 0, cost: 0 } } }, false).error.includes("近 30 天"), "官方账本无调用时给提示")
-ok(_internal.officialUsage({ ...snap, balance: { remaining: 3, granted: 0 } }, false).windows[0].aside === true, "没有授信额度时余额窗口是 aside")
+const noGrant = _internal.officialUsage({ ...snap, balance: { remaining: 3, granted: 0 } }, false)
+ok(noGrant.windows[0].aside === true, "没有授信额度时余额窗口是 aside")
+ok(noGrant.windows[0].amount === undefined && noGrant.windows[0].limit === undefined, "没有授信额度时余额窗口不带 amount/limit")
 
 // 官方接口失败时退回本地估算，并在 error 里说明
 const bad = await hooks.auth.usage(async () => ({ type: "api", key: "stlzi_test", metadata: { console: SESSION_COOKIE + "=bogus" } }))

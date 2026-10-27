@@ -149,13 +149,18 @@ With `perModel` on (the default), the top 6 models by spend are listed too.
 
 Either way these are `aside` windows — **they show usage, they never stop you from using the key**. In the estimate
 path, giving a budget turns the matching windows into real percentage windows (`unit: usd`) and magpie's router
-starts steering around an account that is over it:
+starts steering around an account that is over it.
 
 ```sh
 magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
 ```
 
 Budgets only affect the estimate path; on the official path the limit is the real granted credit.
+
+> **Why most windows have no `N%`**: magpie only draws a percentage when a window carries `amount` or `limit`;
+> otherwise it prints `display` verbatim. The usage windows (today / 7 days / 30 days / per model) have no cap, so
+> the plugin leaves `amount` and `limit` out — adding them gets you a `0%` prefix that can never move. The balance
+> window does have a real cap (the granted credit), so it keeps `amount`/`limit`/`used`, and that percentage is real.
 
 ## Options
 

@@ -141,13 +141,17 @@ magpie models | grep systalyze  # 看模型
 | 近 30 天（本地估算） | 同上，30 天 |
 
 这两个分支都是 `aside`——**只展示用量，不限制你能不能用**。在估算分支里给了预算，对应窗口就变成
-真正的百分比窗口（`unit: usd`），用超了 magpie 会绕开这个账号：
+真正的百分比窗口（`unit: usd`），用超了 magpie 会绕开这个账号。
 
 ```sh
 magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
 ```
 
 预算只作用于估算分支；官方分支的上限就是真实授信额度。
+
+> **为什么大多数窗口没有 `N%`**：magpie 只在窗口带 `amount` 或 `limit` 时才画百分比，否则把 `display`
+> 原样输出。用量窗口（今日 / 7 天 / 30 天 / 分模型）没有上限，所以插件**不写** `amount`/`limit`——写了会得到
+> 一个恒为 `0%` 的前缀。余额窗口有真实上限（授信总额），才带 `amount`/`limit`/`used`，那个百分比是真的。
 
 ## 选项
 

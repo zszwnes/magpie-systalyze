@@ -138,9 +138,8 @@ const pct = (used, limit) => (limit > 0 ? (100 * used) / limit : used > 0 ? 100 
 function usageWindow(name, s, extra = {}) {
   return {
     name,
-    used: 0, // 没有上限，只有实际用量
+    // 没有上限就没有百分比：不写 used/amount，否则 magpie 会给每行补一个 0%（见 README「用量窗口」）
     display: `${compact(s.in + s.out)} tokens · ${s.calls} 次 · 约 ${money(s.cost)}`,
-    amount: s.in + s.out,
     unit: "tokens",
     aside: true,
     ...extra,
@@ -167,10 +166,8 @@ function officialUsage(snap, withModels) {
   } else {
     windows.push({
       name: "余额",
-      used: 0,
       aside: true,
       display: `${money(remaining)} 可用`,
-      amount: round4(remaining),
       unit: "usd",
     })
   }
@@ -181,9 +178,7 @@ function officialUsage(snap, withModels) {
     const s = snap.windows[key] ?? { calls: 0, in: 0, out: 0, cacheRead: 0, cost: 0 }
     windows.push({
       name: labels[key],
-      used: 0,
       aside: true,
-      amount: round4(s.cost),
       unit: "usd",
       display: `${money(s.cost)} · ${compact(s.in + s.out)} tokens · ${s.calls} 次`,
       span: spans[key],
@@ -201,9 +196,7 @@ function officialUsage(snap, withModels) {
     for (const m of used) {
       out.windows.push({
         name: shortModel(m.id),
-        used: 0,
         aside: true,
-        amount: round4(m.cost),
         unit: "usd",
         display: `${money(m.cost)} · ${compact(m.in + m.out)} tokens · ${m.calls} 次`,
         model: m.id,
@@ -280,10 +273,8 @@ async function localEstimate(directory, settings = {}, withModels = true, sessio
     for (const m of used) {
       out.windows.push({
         name: shortModel(m.id),
-        used: 0,
         aside: true,
         display: `${compact(m.in + m.out)} tokens · ${m.calls} 次 · 约 ${money(m.cost)}`,
-        amount: m.in + m.out,
         unit: "tokens",
         model: m.id,
       })

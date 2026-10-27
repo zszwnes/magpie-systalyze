@@ -1,5 +1,13 @@
 # 变更记录 / Changelog
 
+## 0.1.2
+
+- 用量窗口不再带假的 `0%`：magpie 只在窗口有 `amount`/`limit` 时才画百分比，所以今日 / 近 7 天 / 近 30 天
+  与分模型窗口现在只给 `display`（金币数、token、次数原样输出）。余额窗口保留真实百分比。
+- 估算分支的 `amount` 也去掉了；预算（`budget`/`budgetDaily`）仍然是真正的百分比窗口。
+- 新增 3 条断言：没有上限的窗口不得带 `amount`/`limit`。
+- 网关 `/v1/magpie/quotas` 的窗口现在没有 `amount`，需要金额请读 `display` 或走官方余额窗口。
+
 ## 0.1.1
 
 官方余额与真实计费 / Official balance and real billing.
