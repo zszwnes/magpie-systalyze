@@ -1,6 +1,8 @@
 node_modules/
 .e2e/
 .e2e-*/
+.probe/
+console-login.html
 .config/
 test/artifacts/
 test/.state/

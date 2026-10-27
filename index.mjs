@@ -1,11 +1,14 @@
 // systalyze 供应商插件：把 inference.systalyze.com 的 10 个预置模型接进 magpie，
-// 并用本机 magpie 的用量账本给出「用了多少」的估算。
+// 用量优先读官方控制台的余额与真实计费，没有控制台会话时退回本机账本估算。
 //
-// 为什么用量是估算：供应商只暴露 /v1/models、/v1/chat/completions、
-// /v1/responses、/v1/messages；/v1/usage、/v1/me、/v1/balance、/v1/quota、
-// /v1/credits 等全部 404 "unknown route"，控制台 console.systalyze.com 是另一套
-// 登录态（用 inference key 打 /api/v1/me 得 401 API401）。所以额度读不到，
-// 只能按 ~/.config/magpie/usage.jsonl 里本供应商的请求行自己汇总。
+// 关于用量：推理端点（inference.systalyze.com）只有 /v1/models、/v1/chat/completions、
+// /v1/responses、/v1/messages；/v1/usage、/v1/me、/v1/balance、/v1/quota、/v1/credits
+// 全部 404 "unknown route"。真实余额在控制台那一套 API 上
+// （https://console.systalyze.com/api/v1，better-auth 会话 cookie），用 inference key
+// 打过去是 401。所以：
+//   - 登录时填了控制台会话（或选项 consoleSession）→ 显示官方余额与官方真实用量；
+//   - 没填 → 按 ~/.config/magpie/usage.jsonl 里本供应商的请求行估算，只报「用了多少」。
+// 官方接口见 console-usage.mjs。
 
 import {
   BASE_URL,
@@ -20,6 +23,7 @@ import {
   presetOf,
   prettyName,
 } from "./models.mjs"
+import { consoleSnapshot, sessionOf } from "./console-usage.mjs"
 import { localUsage, shortModel } from "./usage-store.mjs"
 
 const CHAT = NPM
@@ -143,14 +147,102 @@ function usageWindow(name, s, extra = {}) {
   }
 }
 
+const round4 = (v) => Math.round(v * 1e4) / 1e4
+
+/** 官方数据：余额窗口 + 三个真实计费窗口 + 分模型明细 */
+function officialUsage(snap, withModels) {
+  const windows = []
+  const granted = snap.balance.granted
+  const remaining = snap.balance.remaining
+  const spent = Math.max(0, granted - remaining)
+  if (granted > 0) {
+    windows.push({
+      name: "余额",
+      used: pct(spent, granted),
+      display: `${money(remaining)} 可用 · 已用 ${money(spent)} / ${money(granted)}`,
+      amount: round4(remaining),
+      limit: round4(granted),
+      unit: "usd",
+    })
+  } else {
+    windows.push({
+      name: "余额",
+      used: 0,
+      aside: true,
+      display: `${money(remaining)} 可用`,
+      amount: round4(remaining),
+      unit: "usd",
+    })
+  }
+
+  const labels = { today: "今日（官方）", "7d": "近 7 天（官方）", "30d": "近 30 天（官方）" }
+  const spans = { today: 86400, "7d": 7 * 86400, "30d": 30 * 86400 }
+  for (const key of ["today", "7d", "30d"]) {
+    const s = snap.windows[key] ?? { calls: 0, in: 0, out: 0, cacheRead: 0, cost: 0 }
+    windows.push({
+      name: labels[key],
+      used: 0,
+      aside: true,
+      amount: round4(s.cost),
+      unit: "usd",
+      display: `${money(s.cost)} · ${compact(s.in + s.out)} tokens · ${s.calls} 次`,
+      span: spans[key],
+    })
+  }
+
+  const out = {
+    plan: "按 key 计费 · 余额与用量来自官方控制台",
+    windows,
+    user: snap.email || undefined,
+  }
+
+  if (withModels) {
+    const used = [...snap.models].sort((a, b) => b.cost - a.cost).slice(0, 6)
+    for (const m of used) {
+      out.windows.push({
+        name: shortModel(m.id),
+        used: 0,
+        aside: true,
+        amount: round4(m.cost),
+        unit: "usd",
+        display: `${money(m.cost)} · ${compact(m.in + m.out)} tokens · ${m.calls} 次`,
+        model: m.id,
+      })
+    }
+  }
+
+  if (!(snap.windows["30d"]?.calls > 0)) out.error = "官方账本里近 30 天还没有调用记录"
+  return out
+}
+
 /**
  * auth.usage 的返回值。
- * 供应商没有额度接口，所以默认只报「实际用量」（aside 窗口，不影响可用性）。
- * 若在选项里给了预算（budget = 每月美元、budgetDaily = 每日美元），
- * 对应窗口就变成真正的百分比窗口：used = 估算花费 / 预算。
+ * 两条路：
+ *   1. 给了控制台会话（登录时填 / 选项 consoleSession）→ 官方余额与官方计费，单位美元；
+ *   2. 没给 → 按本机 usage.jsonl 估算，只报用量（aside，不影响可用性）。
+ * 选项 budget（每月美元）/ budgetDaily（每日美元）只作用于估算那条路。
  */
-async function usage(directory, settings = {}) {
+async function usage(directory, settings = {}, auth = null) {
   const withModels = settings.perModel !== false
+  const session = sessionOf(auth, settings)
+
+  // 有控制台会话：走官方余额与官方计费
+  if (session) {
+    try {
+      return officialUsage(await consoleSnapshot(session), withModels)
+    } catch (e) {
+      const why = String(e?.message ?? e)
+      const fallback = await localEstimate(directory, settings, withModels, session)
+      fallback.error = `官方接口读不到（${why}），下面退回本地估算`
+      return fallback
+    }
+  }
+
+  return localEstimate(directory, settings, withModels, session)
+}
+
+/** 本地账本估算（没有控制台会话时的默认路径） */
+async function localEstimate(directory, settings = {}, withModels = true, session = null) {
   const budget = Number(settings.budget) > 0 ? Number(settings.budget) : 0
   const budgetDaily = Number(settings.budgetDaily) > 0 ? Number(settings.budgetDaily) : 0
   let data
@@ -209,7 +301,7 @@ async function usage(directory, settings = {}) {
 // ---- 插件 --------------------------------------------------------------------
 
 export async function SystalyzePlugin({ client, directory } = {}, options = {}) {
-  const settings = { localUsage: true, perModel: true, budget: 0, budgetDaily: 0, ...options }
+  const settings = { localUsage: true, perModel: true, budget: 0, budgetDaily: 0, consoleSession: "", ...options }
   const base = BASE_URL
   const id = PROVIDER
 
@@ -242,6 +334,12 @@ export async function SystalyzePlugin({ client, directory } = {}, options = {}) 
               message: "账号备注名（留空则用密钥末四位）",
               placeholder: "",
             },
+            {
+              type: "password",
+              key: "console",
+              message: "控制台 session cookie（可选：粘上就显示官方余额与真实计费，留空则只用本地估算）",
+              placeholder: "__Secure-better-auth.session_token=…",
+            },
           ],
         },
       ],
@@ -261,10 +359,12 @@ export async function SystalyzePlugin({ client, directory } = {}, options = {}) 
       async usage(getAuth) {
         const auth = await getAuth()
         if (auth?.type !== "api" || !auth.key) return { windows: [], error: "未登录" }
-        if (!settings.localUsage) return { windows: [] }
+        const session = sessionOf(auth, settings)
+        if (!settings.localUsage && !session) return { windows: [] }
         const user = auth?.metadata?.name || `key …${String(auth.key).slice(-4)}`
         try {
-          return { user, ...(await usage(directory, settings)) }
+          const out = await usage(directory, settings, auth)
+          return { user: out.user || user, ...out }
         } catch (e) {
           return { user, windows: [], error: String(e?.message ?? e) }
         }
@@ -326,6 +426,9 @@ export const _internal = {
   prettyName,
   runtimeModel,
   configModel,
+  localEstimate,
+  officialUsage,
+  sessionOf,
   usage,
   variants,
 }

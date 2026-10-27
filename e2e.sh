@@ -11,10 +11,15 @@
 # are summed from magpie's own ledger: a fresh sandbox starts out at zero.
 # Route a few requests through this provider first if you want to see numbers.
 # SYSTALYZE_NAME names the account (default: none, so it shows as key …last4).
+# SYSTALYZE_CONSEC is the optional console session cookie
+# (__Secure-better-auth.session_token from console.systalyze.com): with it the
+# usage windows are the vendor's own balance and billing, without it they are
+# magpie's estimate. Leave it empty to exercise the estimate path.
 # MAGPIE is the magpie binary (default: magpie on PATH, else the Windows build).
 set -eu
 : "${SYSTALYZE_KEY:?}"
 name=${SYSTALYZE_NAME-}
+cookie=${SYSTALYZE_CONSEC-}
 here=$(cd "$(dirname "$0")" && pwd)
 sb=$here/.e2e/$(printf %s "$SYSTALYZE_KEY" | (md5sum 2>/dev/null || shasum) | cut -c1-8)
 rm -rf "$sb" && mkdir -p "$sb"
@@ -42,9 +47,10 @@ echo "== plugin add"; run plugin add "$here" </dev/null
 # PLUGIN_NAME overrides both.
 echo "== plugin options"
 run plugin options ${PLUGIN_NAME:-$(basename "$here")} '{"localUsage":true,"perModel":true}' </dev/null
-# the sign-in asks for the account's name, then for the key
+# the sign-in asks for the account's name, then for an optional console cookie,
+# then for the key
 echo "== plugin login systalyze"
-printf '%s\n%s\n' "$name" "$SYSTALYZE_KEY" | run plugin login systalyze
+printf '%s\n%s\n%s\n' "$name" "$cookie" "$SYSTALYZE_KEY" | run plugin login systalyze
 # magpie's ledger is the only usage source this plugin has, so a fresh sandbox
 # starts at zero: SEED=1 puts a few synthetic rows in it to see the windows move
 [ -n "${SEED-}" ] && node "$here/test/seed-usage.mjs" "$sb"

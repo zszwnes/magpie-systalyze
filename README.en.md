@@ -8,15 +8,17 @@
 
 [Systalyze](https://systalyze.com) (`https://inference.systalyze.com/v1`) as a provider in [magpie](https://github.com/yetone/magpie):
 its 10 models ship with capabilities and prices, so one sign-in is enough to use them from magpie, Codex and OpenCode.
-Usage is estimated from magpie's own ledger and shows on the account row, in `magpie quota`, and in the gateway's `/v1/magpie/quotas`.
+Usage shows on the account row, in `magpie quota`, and in the gateway's `/v1/magpie/quotas`: paste a console
+session and you get the **official balance and real billing**; leave it out and the plugin estimates from magpie's own ledger.
 
 - **Models**: all 10 of `GET /v1/models` are preset in `models.mjs`, with context and output limits, vision, reasoning, the `low`/`medium`/`high` effort levels, and a reference price per million tokens. At runtime the real endpoint still wins: new models appear on their own, and when the endpoint is down the preset table comes back.
 - **API shape**: everything goes through `/v1/chat/completions` (`@ai-sdk/openai-compatible`). The vendor also serves `/v1/responses` and `/v1/messages`, but chat completions is the one shape that works for all 10 models, so there is no per-model API split.
-- **Usage**: the vendor has no quota endpoint at all (see below), so usage comes from magpie's `usage.jsonl`: tokens summed per day / 7 days / 30 days, priced with the table in `models.mjs`. Set a budget in the options and the estimate turns into real percentage windows, which magpie's router steers around.
+- **Usage (official)**: paste a `console.systalyze.com` session cookie when signing in (optional) and you get the official balance, the granted credit, and the console's own today / 7 days / 30 days spend in USD, plus a per-model breakdown.
+- **Usage (estimate)**: without a console session it falls back to magpie's `usage.jsonl`: tokens summed per day / 7 days / 30 days, priced with the table in `models.mjs`. Set a budget in the options and the estimate turns into real percentage windows, which magpie's router steers around.
 
-## Why usage is an estimate
+## Where usage comes from
 
-The vendor exposes four endpoints: `/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages`.
+**The inference endpoint has no quota API.** It exposes four endpoints: `/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages`.
 All of the following answer 404 `{"error":{"message":"unknown route"}}`:
 
 `/v1/usage`, `/v1/me`, `/v1/balance`, `/v1/credits`, `/v1/quota`, `/v1/subscription`,
@@ -24,15 +26,33 @@ All of the following answer 404 `{"error":{"message":"unknown route"}}`:
 `/v1/whoami`, `/v1/profile`, `/v1/plan`, `/v1/stats`, `/v1/billing`, `/v1/spend`,
 `/v1/dashboard/billing/*`, `/openapi.json`, `/docs`, `/swagger.json`.
 
-No response header carries a quota or a balance either (only Cloudflare's). `console.systalyze.com` is **a separate
-login system**: an inference key against its `/api/v1/me` gets `401 {"error":{"code":"API401"}}`, so the plugin can't read it.
+No response header carries a quota or a balance either (only Cloudflare's), so magpie's built-in
+`balance=/v1/usage` does not apply to a custom provider.
 
-That rules out magpie's built-in `balance=/v1/usage` for a custom provider. The plugin reads magpie's own ledger
-(`~/.config/magpie/usage.jsonl`) instead: rows whose `provider` is `systalyze` / `systalyze-plugin`, or whose `host` is
-`inference.systalyze.com`, summed per window; `kind:"model_list"` probe rows are skipped.
+**The balance lives on the console API.** `console.systalyze.com` is **a separate login system** (better-auth): an
+inference key against its `/api/v1/me` gets `401 {"error":{"code":"API401"}}`, but it accepts its own session cookie
+`__Secure-better-auth.session_token` (the one in F12 › Application › Cookies; that single cookie is enough).
+The plugin reads:
 
-The upside: no extra permission, no network call, per machine. The cost: **other clients (curl, other tools) are not
-counted here**, and the prices are estimates.
+| Request | What you get |
+|---|---|
+| `GET /api/v1/me` | email, `activeTenantId`, `activeProjectId` |
+| `GET /api/v1/tenants/<tenant>/billing` | `balance.availableMicroUsd` (remaining, micro-USD) |
+| `GET /api/v1/tenants/<tenant>/billing/grants` | top-ups and grants; their sum is the granted credit |
+| `GET /api/v1/projects/<project>/inference-usage?groupBy=day\|model` | real calls, tokens, `chargeMicroUsd` |
+
+So there are two paths and the plugin picks one:
+
+1. **Session present → official numbers** (recommended). The balance window shows "how much is left / out of how
+   much", and three more windows carry the console's own today / 7 days / 30 days spend in USD, plus the top 6 models
+   by spend. Correct across clients and machines.
+2. **No session → estimate from the local ledger.** It reads `~/.config/magpie/usage.jsonl`, keeps rows whose
+   `provider` is `systalyze` / `systalyze-plugin` or whose `host` is `inference.systalyze.com`, sums tokens per
+   window and prices them; `kind:"model_list"` probe rows are skipped. No extra permission, no network call — but
+   **other clients (curl, other tools) are not counted here**, and the prices are estimates.
+
+An expired session (401) never breaks the output: the plugin falls back to the estimate and puts the reason in
+`magpie quota`'s `error`.
 
 ## Install
 
@@ -56,7 +76,22 @@ magpie plugin add ./
 magpie plugin login systalyze
 ```
 
-It asks for an account name (optional) and then for the `stlzi_` key. Left empty, the account shows as `key …last4`.
+It asks for two things, then for the `stlzi_` key:
+
+1. **Account name** (optional) — left empty, the account shows as `key …last4`.
+2. **Console session cookie** (optional) — paste it to get the official balance. Three forms are accepted:
+   - a full cookie header: `__Secure-better-auth.session_token=…; other=…`
+   - just the value (about 79 chars, starting with `s.`)
+   - just `__Secure-better-auth.session_token=…`
+
+    Where to get it: sign in to [console.systalyze.com](https://console.systalyze.com) → F12 → Application →
+    Cookies → `https://console.systalyze.com` → `__Secure-better-auth.session_token` → copy the Value.
+    It is **a login credential**, on par with a password: it is stored only in this machine's
+    `~/.config/magpie/plugin-auth.json` under `metadata.console`, and the plugin sends it only to
+    `console.systalyze.com`. Sessions last about 7 days; sign in again when it expires.
+
+Leaving it empty is fine — you can add the `consoleSession` option later, or just run
+`magpie plugin login systalyze` again.
 
 ```sh
 magpie provider test systalyze  # one tiny real chat request
@@ -91,31 +126,46 @@ All 10 models of `GET /v1/models` are preset in `models.mjs`; the fields come fr
 
 ## Usage windows
 
-By default there are three `aside` windows — **they show usage, they never stop you from using the key**:
+The two paths produce different windows.
+
+**With a console session (official):**
+
+| Window | Contents | Shape |
+|---|---|---|
+| Balance | `$50.97 available · used $0.0294 / $51.0000` | percentage (`unit: usd`, `limit` = granted credit) |
+| Today (official) | `$0.0294 · 20K tokens · 273 calls` | `aside`, USD |
+| Last 7 days (official) | the same | `aside`, USD |
+| Last 30 days (official) | the same | `aside`, USD |
+
+With `perModel` on (the default), the top 6 models by spend are listed too.
+
+**Without a session (local estimate):**
 
 | Window | Contents |
 |---|---|
-| Today | today's tokens, calls and estimated cost |
-| Last 7 days | the same, over 7 days |
-| Last 30 days | the same, over 30 days |
+| Today (local estimate) | today's tokens, calls and estimated cost |
+| Last 7 days (local estimate) | the same, over 7 days |
+| Last 30 days (local estimate) | the same, over 30 days |
 
-With `perModel` on (the default), the 6 most used models of the last 30 days are listed too, one window each.
-
-Give a budget in the options and the matching windows become real percentage windows (`unit: usd`), and magpie's
-router starts steering around an account that is over it:
+Either way these are `aside` windows — **they show usage, they never stop you from using the key**. In the estimate
+path, giving a budget turns the matching windows into real percentage windows (`unit: usd`) and magpie's router
+starts steering around an account that is over it:
 
 ```sh
 magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
 ```
 
+Budgets only affect the estimate path; on the official path the limit is the real granted credit.
+
 ## Options
 
 | Option | Default | Meaning |
 |---|---|---|
-| `localUsage` | `true` | Off: show no usage windows at all |
-| `perModel` | `true` | Also list up to 6 models of the last 30 days |
-| `budget` | `0` | Monthly budget in USD. `>0` turns the 30 day window into a percentage one, and 7 days uses a quarter of it |
-| `budgetDaily` | `0` | Daily budget in USD. `>0` turns the today window into a percentage one |
+| `consoleSession` | `""` | Console session cookie. Given, the plugin reads the official balance and real billing; empty, it estimates from the local ledger. The one typed at sign-in is stored in the account's `metadata.console` and this option wins over it (handy for sharing one session across accounts, or topping it up without signing in again) |
+| `localUsage` | `true` | Off: show no estimate windows. It does **not** affect the official path |
+| `perModel` | `true` | Also list up to 6 models (both paths) |
+| `budget` | `0` | Monthly budget in USD, estimate path only. `>0` turns the 30 day window into a percentage one, and 7 days uses a quarter of it |
+| `budgetDaily` | `0` | Daily budget in USD, estimate path only. `>0` turns the today window into a percentage one |
 
 ## Layout
 
@@ -123,6 +173,7 @@ magpie plugin options magpie-systalyze '{"budget":10,"budgetDaily":1}'
 |---|---|
 | `index.mjs` | The plugin: `config` / `auth`(methods, loader, usage) / `provider.models` / `chat.headers`; helpers hang off `_internal` (every function an entry file exports is called as a plugin) |
 | `models.mjs` | The preset capabilities and prices of the 10 models |
+| `console-usage.mjs` | Official numbers: normalises the session cookie, reads `/me`, `/billing`, `/billing/grants`, `/inference-usage`, cached for 60 seconds |
 | `usage-store.mjs` | Reads `usage.jsonl`, sums per window, prices it (parsed rows cached by size+mtime) |
 | `test/smoke.mjs` | Offline smoke test; `REAL_KEY=stlzi_… node test/smoke.mjs` adds a check against the real endpoint |
 | `test/seed-usage.mjs` | Puts a few synthetic rows in a sandbox's `usage.jsonl`, so the windows have numbers |
@@ -140,6 +191,7 @@ Manual check with a real magpie (sandbox in `.e2e/`, your own config untouched):
 ```sh
 SYSTALYZE_KEY=stlzi_… ./e2e.sh          # add the plugin, sign in, list models, one real request
 SEED=1 SYSTALYZE_KEY=stlzi_… ./e2e.sh   # also puts a few synthetic rows in the sandbox ledger
+SYSTALYZE_KEY=stlzi_… SYSTALYZE_CONSEC="$(cat cookie.txt)" ./e2e.sh   # sign in with a console session too
 ```
 
 A sandbox ledger starts empty, so without `SEED=1` all three windows read `0 tokens · 0 calls`.
@@ -155,6 +207,9 @@ Release steps: [RELEASE.md](./RELEASE.md).
 - The reasoning field isn't uniform: `deepseek-*` uses `message.reasoning_content`, the rest use
   `message.reasoning`; the gateway converts, and the plugin declares `interleaved.field` per model.
 - Failed requests (`status >= 400`) count as calls and are reported in the windows' `error`, but cost nothing.
+- The official path caches console responses for 60 seconds (at most one `/me`, `/billing`, `/billing/grants`
+  and `/inference-usage` call per minute). A session lasts about 7 days; once it expires the reason shows up in
+  `magpie quota`'s `error` and the plugin falls back to the estimate instead of failing.
 
 ## License
 

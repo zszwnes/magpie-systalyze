@@ -1,7 +1,7 @@
 {
   "name": "magpie-systalyze",
-  "version": "0.1.0",
-  "description": "magpie provider plugin for Systalyze (inference.systalyze.com): its 10 models with capabilities and prices, plus the usage magpie can estimate from its own ledger",
+  "version": "0.1.1",
+  "description": "magpie provider plugin for Systalyze (inference.systalyze.com): its 10 models with capabilities and prices, official balance and billing from the console session cookie, or a usage estimate from magpie's own ledger",
   "type": "module",
   "main": "./index.mjs",
   "exports": "./index.mjs",
@@ -9,13 +9,14 @@
     "index.mjs",
     "models.mjs",
     "usage-store.mjs",
+    "console-usage.mjs",
     "README.md",
     "README.en.md",
     "LICENSE"
   ],
   "scripts": {
     "test": "node test/smoke.mjs",
-    "check": "node --check index.mjs && node --check models.mjs && node --check usage-store.mjs && node test/smoke.mjs"
+    "check": "node --check index.mjs && node --check models.mjs && node --check usage-store.mjs && node --check console-usage.mjs && node test/smoke.mjs"
   },
   "keywords": [
     "magpie",
@@ -45,7 +46,8 @@
       "localUsage": true,
       "perModel": true,
       "budget": 0,
-      "budgetDaily": 0
+      "budgetDaily": 0,
+      "consoleSession": ""
     }
   }
 }

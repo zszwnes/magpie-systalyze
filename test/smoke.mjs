@@ -3,6 +3,7 @@
 import { PRESET_MODELS, EFFORTS, BASE_URL, PROVIDER, VERSION } from "../models.mjs"
 import { SystalyzePlugin, SystalyzeModels, _internal } from "../index.mjs"
 import { windowsOf, costOf, summarize, when } from "../usage-store.mjs"
+import { SESSION_COOKIE, normalizeSession, sessionOf } from "../console-usage.mjs"
 
 let failed = 0
 const ok = (cond, msg) => {
@@ -76,6 +77,38 @@ ok(s.calls === 2 && s.errors === 1, "统计调用与失败次数")
 ok(s.probe === undefined, "不统计探测行")
 ok(s.in === 1000 && s.out === 500, "统计 token")
 ok(s.models.get(ids[0]).calls === 2, "按模型归集")
+
+console.log("console-usage.mjs")
+ok(normalizeSession("") === "", "空输入归一化为空串")
+ok(normalizeSession("cookie: a=1; b=2") === "a=1; b=2", "去掉 cookie: 前缀")
+ok(normalizeSession("abc123") === SESSION_COOKIE + "=abc123", "裸 token 补 cookie 名")
+ok(normalizeSession("a=1\r\nb=2") === "a=1; b=2", "多行合并成一行")
+const cookie = normalizeSession(SESSION_COOKIE + "=xyz")
+ok(sessionOf({ metadata: { console: cookie } }) === cookie, "会话从 metadata.console 读")
+ok(sessionOf({ metadata: { console: "nope" } }, { consoleSession: cookie }) === cookie, "选项 consoleSession 优先")
+ok(sessionOf({}, {}) === "", "没有会话时返回空串")
+
+// 官方窗口：假快照，不联网
+const snap = {
+  email: "a@b.c",
+  balance: { remaining: 49, granted: 50 },
+  windows: { today: { calls: 2, in: 100, out: 50, cacheRead: 0, cost: 0.5 }, "7d": { calls: 2, in: 100, out: 50, cacheRead: 0, cost: 0.5 }, "30d": { calls: 2, in: 100, out: 50, cacheRead: 0, cost: 0.5 } },
+  models: [{ id: ids[0], calls: 2, in: 100, out: 50, cacheRead: 0, cost: 0.5 }],
+}
+const off = _internal.officialUsage(snap, true)
+ok(off.windows[0].name === "余额" && off.windows[0].limit === 50, "余额窗口用授信额度当上限")
+ok(Math.round(off.windows[0].used * 100) / 100 === 2, "余额窗口按已用/授信算百分比")
+ok(off.windows[0].unit === "usd" && off.windows[0].display.includes("$49.0000"), "余额显示可用金额")
+ok(off.windows.slice(1, 4).every((w) => w.aside === true && w.unit === "usd"), "三个官方窗口是 aside 美元窗口")
+ok(off.windows[1].display.includes("$0.5000"), "官方窗口显示当天花费")
+ok(off.windows.at(-1).model === ids[0], "官方分模型窗口带 model id")
+ok(_internal.officialUsage({ ...snap, windows: { today: snap.windows.today, "7d": snap.windows["7d"], "30d": { calls: 0, in: 0, out: 0, cacheRead: 0, cost: 0 } } }, false).error.includes("近 30 天"), "官方账本无调用时给提示")
+ok(_internal.officialUsage({ ...snap, balance: { remaining: 3, granted: 0 } }, false).windows[0].aside === true, "没有授信额度时余额窗口是 aside")
+
+// 官方接口失败时退回本地估算，并在 error 里说明
+const bad = await hooks.auth.usage(async () => ({ type: "api", key: "stlzi_test", metadata: { console: SESSION_COOKIE + "=bogus" } }))
+ok(bad.windows.some((w) => w.name.includes("本地估算")), "会话无效时退回本地估算")
+ok(String(bad.error).includes("官方接口读不到"), "回退时说明原因")
 
 console.log("只读插件入口")
 const m = await SystalyzeModels({ client: {} }, {})

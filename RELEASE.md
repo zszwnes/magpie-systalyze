@@ -6,15 +6,24 @@
 2. **手动跑一遍真实 magpie / Run `./e2e.sh` against a real magpie and a real key** before tagging:
    ```sh
    SEED=1 SYSTALYZE_KEY=stlzi_... ./e2e.sh
+   SYSTALYZE_KEY=stlzi_... SYSTALYZE_CONSEC="$(cat cookie.txt)" ./e2e.sh
    ```
-   (`SEED=1` fills the sandbox ledger with a few synthetic rows, so the usage windows have numbers to show.)
-   Check that:
+   (`SEED=1` fills the sandbox ledger with a few synthetic rows, so the estimate windows have numbers to show.
+   `SYSTALYZE_CONSEC` signs in with a console session, so the official windows have numbers.)
+   Run both. Check that:
    - `plugin add` reports `systalyze (Systalyze, 10 models)`;
-   - `plugin login systalyze` accepts the key without asking again afterwards;
-   - `quota systalyze --json` shows the three windows (`今日` / `近 7 天` / `近 30 天`), each with
-     `unit: "tokens"` and an `aside` flag, plus one window per model when `perModel` is on;
-   - with `{"budget":10,"budgetDaily":1}` in the options the three windows switch to `unit: "usd"`,
-     `limit` 1 / 2.5 / 10 and `used` = the estimate over that limit;
+   - `plugin login systalyze` asks for the account name, the console session (optional) and the key, then
+     doesn't ask again;
+   - **estimate path** — `quota systalyze --json` shows the three windows (`今日（本地估算）` /
+     `近 7 天（本地估算）` / `近 30 天（本地估算）`), each with `unit: "tokens"` and an `aside` flag,
+     plus one window per model when `perModel` is on;
+   - **official path** — with a session the first window is the balance (`unit: "usd"`, `limit` = granted
+     credit, `used` = share spent), followed by `今日（官方）` / `近 7 天（官方）` / `近 30 天（官方）`
+     as `aside` USD windows, and the account row shows the console email;
+   - with `{"budget":10,"budgetDaily":1}` in the options the estimate windows switch to `unit: "usd"`,
+     `limit` 1 / 2.5 / 10 and `used` = the estimate over that limit; budgets don't touch the official path;
+   - a bogus session (`"consoleSession": "__Secure-better-auth.session_token=bogus"`) falls back to the
+     estimate and `error` mentions 官方接口读不到;
    - `models` lists all 10 models under `systalyze/`, with context and output limits;
    - `provider test systalyze` gets an answer (a real chat request).
 3. Bump `version` in `package.json` and commit.
